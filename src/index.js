@@ -10,6 +10,10 @@ import OpenAI from 'openai';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { createRequire } from 'module';
+import { promisify } from 'util';
+import { exec as execCallback } from 'child_process';
+
+const exec = promisify(execCallback);
 
 const require = createRequire(import.meta.url);
 const __filename = fileURLToPath(import.meta.url);
@@ -21,11 +25,51 @@ config();
 const program = new Command();
 const pkg = require('../package.json');
 
-// Initialize clients
-const octokit = new Octokit({
-  auth: process.env.GITHUB_TOKEN
-});
+async function checkAndConfigureGitHubToken() {
+  // Check for existing token in environment
+  let token = process.env.GITHUB_TOKEN;
 
+  // If no token, check git config
+  if (!token) {
+    try {
+      const { stdout } = await exec('git config --global github.token');
+      token = stdout.trim();
+    } catch (error) {
+      // Token not found in git config
+    }
+  }
+
+  // If still no token, prompt user
+  if (!token) {
+    console.log(chalk.yellow('No GitHub token found. Let\'s set one up.'));
+    console.log(chalk.cyan('You can create a new token at: https://github.com/settings/tokens/new'));
+    console.log(chalk.cyan('Make sure to enable the \'repo\' scope.'));
+
+    const { newToken } = await inquirer.prompt([
+      {
+        type: 'password',
+        name: 'newToken',
+        message: 'Enter your GitHub token:',
+        validate: input => input.length > 0
+      }
+    ]);
+
+    // Save token to git config
+    try {
+      await exec(`git config --global github.token "${newToken}"`);
+      console.log(chalk.green('GitHub token saved successfully!'));
+      token = newToken;
+    } catch (error) {
+      console.error(chalk.red('Failed to save GitHub token:'), error.message);
+      process.exit(1);
+    }
+  }
+
+  return token;
+}
+
+// Initialize clients
+let octokit;
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY
 });
@@ -109,10 +153,13 @@ async function createReleasePR(owner, repo, summary, selectedPRs, sourceBranch, 
 }
 
 async function run() {
-  if (!process.env.GITHUB_TOKEN || !process.env.OPENAI_API_KEY) {
-    console.error(chalk.red('Error: GITHUB_TOKEN and OPENAI_API_KEY environment variables are required'));
-    process.exit(1);
-  }
+  // Check and configure GitHub token
+  const githubToken = await checkAndConfigureGitHubToken();
+  
+  // Initialize Octokit with the token
+  octokit = new Octokit({
+    auth: githubToken
+  });
 
   const { owner, repo } = await inquirer.prompt([
     {
