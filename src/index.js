@@ -72,6 +72,13 @@ async function checkAndConfigureGitHubToken() {
 let octokit;
 let openai;
 
+// Initialize tokens in correct order
+async function initializeTokens() {
+  const githubToken = await checkAndConfigureGitHubToken();
+  const openaiToken = await checkAndConfigureOpenAIToken();
+  return { githubToken, openaiToken };
+}
+
 async function checkAndConfigureOpenAIToken() {
   // Check for existing token in environment
   let token = process.env.OPENAI_API_KEY;
@@ -196,11 +203,8 @@ ${summary}`;
 }
 
 async function run() {
-  // Check and configure tokens
-  const [githubToken, openaiToken] = await Promise.all([
-    checkAndConfigureGitHubToken(),
-    checkAndConfigureOpenAIToken()
-  ]);
+  // Initialize tokens sequentially
+  const { githubToken, openaiToken } = await initializeTokens();
   
   // Initialize clients with tokens
   octokit = new Octokit({
