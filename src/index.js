@@ -164,11 +164,49 @@ Keep the summary concise, clear, and focused on the user impact. Use professiona
       max_tokens: 1000
     });
 
+    // Validate response structure
+    if (!response?.choices?.length || !response.choices[0]?.message?.content) {
+      throw new Error(
+        'Invalid API response structure. Expected response.choices[0].message.content'
+      );
+    }
+
     spinner.succeed('Summary generated successfully');
     return response.choices[0].message.content;
   } catch (error) {
     spinner.fail('Failed to generate summary');
-    console.error(chalk.red(`Error: ${error.message}`));
+
+    // Handle specific API response errors
+    if (error.message.includes('Invalid API response')) {
+      console.error(
+        chalk.red('Error: The AI service returned an unexpected response format.\n') +
+        chalk.yellow('This might be due to:') +
+        '\n- Service temporarily unavailable' +
+        '\n- Rate limiting' +
+        '\n- Model configuration issues\n' +
+        chalk.cyan('Please try again in a few moments.')
+      );
+    } else {
+      console.error(chalk.red(`Error: ${error.message}`));
+    }
+
+    // Provide fallback option
+    const { useFallback } = await inquirer.prompt([{
+      type: 'confirm',
+      name: 'useFallback',
+      message: 'Would you like to use a simple list format instead?',
+      default: true
+    }]);
+
+    if (useFallback) {
+      return selectedPRs
+        .map((pr) => {
+          const date = new Date(pr.created_at).toLocaleDateString();
+          return `#${pr.number} - ${pr.title} (by [@${pr.user.login}](https://github.com/${pr.user.login}) on ${date})`;
+        })
+        .join('\n');
+    }
+
     process.exit(1);
   }
 }
