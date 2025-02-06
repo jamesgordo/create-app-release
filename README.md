@@ -28,6 +28,7 @@ npx create-app-release
 ```
 
 On first run, the tool will guide you through:
+
 1. Setting up your GitHub token (stored in git config)
 2. Configuring your OpenAI API key (stored in git config)
 3. Selecting pull requests for the release
@@ -39,6 +40,7 @@ On first run, the tool will guide you through:
 You'll need two tokens to use this tool:
 
 1. **GitHub Token** - Create at [GitHub Token Settings](https://github.com/settings/tokens/new)
+
    - Required scope: `repo`
    - Will be stored in git config as `github.token`
 
@@ -60,18 +62,22 @@ The tool generates professional release notes in this format:
 
 ```markdown
 ### 🚀 Features
+
 - Enhanced user authentication system
 - New dashboard analytics
 
 ### 🐛 Bug Fixes
+
 - Fixed memory leak in background tasks
 - Resolved login issues on Safari
 
 ### 🔧 Improvements
+
 - Optimized database queries
 - Updated dependencies
 
 ### Pull Requests
+
 #123 - Add user authentication by [@username](https://github.com/username) (2024-02-01)
 #124 - Fix memory leak by [@dev](https://github.com/dev) (2024-02-02)
 ```
