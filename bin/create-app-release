@@ -1,0 +1,7 @@
+#!/usr/bin/env node
+
+// Suppress the punycode deprecation warning
+process.removeAllListeners('warning');
+
+// Import and run the main script
+import('../src/index.js');

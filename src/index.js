@@ -383,7 +383,7 @@ async function run() {
 }
 
 program
-  .name('git-release-ai')
+  .name('create-app-release')
   .description('AI-powered GitHub release automation tool')
   .version(pkg.version)
   .action(run)
