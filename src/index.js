@@ -169,19 +169,17 @@ Keep the summary concise, clear, and focused on the user impact. Use professiona
   }
 }
 
-async function createReleasePR(owner, repo, summary, selectedPRs, sourceBranch, targetBranch) {
+async function createReleasePR(owner, repo, summary, selectedPRs, sourceBranch, targetBranch, version) {
   const spinner = ora('Creating release PR...').start();
   try {
-    const prList = selectedPRs.map(pr => 
-      `- [#${pr.number}](${pr.html_url}) - ${pr.title} by @${pr.user.login} (${new Date(pr.created_at).toLocaleDateString()})`
-    ).join('\n');
+    const body = `# Release Summary
 
-    const body = `${summary}\n\n## Included Pull Requests\n${prList}`;
+${summary}`;
 
     const { data: pr } = await octokit.pulls.create({
       owner,
       repo,
-      title: `Release ${new Date().toISOString().split('T')[0]}`,
+      title: `Release: Version ${version}`,
       head: sourceBranch,
       base: targetBranch,
       body,
@@ -268,7 +266,20 @@ async function run() {
   console.log(chalk.cyan('\nSummary:'));
   console.log(summary);
 
-  const { confirm, sourceBranch, targetBranch } = await inquirer.prompt([
+  const { version, confirm, sourceBranch, targetBranch } = await inquirer.prompt([
+    {
+      type: 'input',
+      name: 'version',
+      message: 'Enter the version number for this release (e.g., 1.2.3):',
+      validate: input => {
+        // Validate semantic versioning format (x.y.z)
+        const semverRegex = /^\d+\.\d+\.\d+$/;
+        if (!semverRegex.test(input)) {
+          return 'Please enter a valid version number in the format x.y.z (e.g., 1.2.3)';
+        }
+        return true;
+      }
+    },
     {
       type: 'confirm',
       name: 'confirm',
@@ -291,7 +302,7 @@ async function run() {
   ]);
 
   if (confirm) {
-    const pr = await createReleasePR(owner, repo, summary, selectedPRs, sourceBranch, targetBranch);
+    const pr = await createReleasePR(owner, repo, summary, selectedPRs, sourceBranch, targetBranch, version);
     console.log(chalk.green('\nSuccess! Release PR created:'), pr.html_url);
   }
 }
