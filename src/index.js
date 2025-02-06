@@ -144,9 +144,29 @@ async function run() {
     }
   ]);
 
-  const summary = await generateSummary(selectedPRs);
+  const { summaryType } = await inquirer.prompt([
+    {
+      type: 'list',
+      name: 'summaryType',
+      message: 'How would you like to summarize the pull requests?',
+      choices: [
+        { name: 'Use AI to generate a summary', value: 'ai' },
+        { name: 'Simply list the selected pull requests', value: 'list' }
+      ]
+    }
+  ]);
 
-  console.log(chalk.cyan('\nGenerated Summary:'));
+  let summary;
+  if (summaryType === 'ai') {
+    summary = await generateSummary(selectedPRs);
+  } else {
+    summary = selectedPRs.map(pr => {
+      const date = new Date(pr.created_at).toLocaleDateString();
+      return `#${pr.number} - ${pr.title} (by [@${pr.user.login}](https://github.com/${pr.user.login}) on ${date})`;
+    }).join('\n');
+  }
+
+  console.log(chalk.cyan('\nSummary:'));
   console.log(summary);
 
   const { confirm, sourceBranch, targetBranch } = await inquirer.prompt([
