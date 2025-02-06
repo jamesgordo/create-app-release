@@ -47,25 +47,27 @@ async function getGitConfigToken(key) {
  * @returns {Promise<string>} The configured token
  */
 async function configureToken({ envKey, gitKey, name, createUrl, additionalInfo = '' }) {
-  const token = process.env[envKey] || await getGitConfigToken(gitKey);
-  
+  const token = process.env[envKey] || (await getGitConfigToken(gitKey));
+
   if (token) return token;
 
   console.log(
     chalk.yellow(`\nNo ${name} token found. Let's set one up.\n`) +
-    chalk.cyan(`Create a new token at: ${createUrl}`)
+      chalk.cyan(`Create a new token at: ${createUrl}`)
   );
 
   if (additionalInfo) {
     console.log(chalk.cyan(additionalInfo));
   }
 
-  const { newToken } = await inquirer.prompt([{
-    type: 'password',
-    name: 'newToken',
-    message: `Enter your ${name} token:`,
-    validate: input => input.length > 0 || 'Token is required'
-  }]);
+  const { newToken } = await inquirer.prompt([
+    {
+      type: 'password',
+      name: 'newToken',
+      message: `Enter your ${name} token:`,
+      validate: (input) => input.length > 0 || 'Token is required',
+    },
+  ]);
 
   try {
     await exec(`git config --global ${gitKey} "${newToken}"`);
@@ -91,14 +93,14 @@ async function initializeTokens() {
     gitKey: 'github.token',
     name: 'GitHub',
     createUrl: 'https://github.com/settings/tokens/new',
-    additionalInfo: 'Make sure to enable the \'repo\' scope.'
+    additionalInfo: "Make sure to enable the 'repo' scope.",
   });
 
   const openaiToken = await configureToken({
     envKey: 'OPENAI_API_KEY',
     gitKey: 'openai.token',
     name: 'OpenAI',
-    createUrl: 'https://platform.openai.com/api-keys'
+    createUrl: 'https://platform.openai.com/api-keys',
   });
 
   return { githubToken, openaiToken };
@@ -119,7 +121,7 @@ async function fetchPullRequests(owner, repo) {
       state: 'closed',
       sort: 'updated',
       direction: 'desc',
-      per_page: 30
+      per_page: 30,
     });
     spinner.succeed(`Found ${pulls.length} pull requests`);
     return pulls;
@@ -138,7 +140,7 @@ async function fetchPullRequests(owner, repo) {
 async function generateSummary(selectedPRs) {
   const spinner = ora('Generating release summary...').start();
   try {
-    const prDetails = selectedPRs.map(pr => ({
+    const prDetails = selectedPRs.map((pr) => ({
       number: pr.number,
       title: pr.title,
       author: pr.user.login,
@@ -158,10 +160,10 @@ ${JSON.stringify(prDetails, null, 2)}
 Keep the summary concise, clear, and focused on the user impact. Use professional but easy-to-understand language.`;
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4",
-      messages: [{ role: "user", content: prompt }],
+      model: 'gpt-4',
+      messages: [{ role: 'user', content: prompt }],
       temperature: 0.7,
-      max_tokens: 1000
+      max_tokens: 1000,
     });
 
     // Validate response structure
@@ -180,23 +182,25 @@ Keep the summary concise, clear, and focused on the user impact. Use professiona
     if (error.message.includes('Invalid API response')) {
       console.error(
         chalk.red('Error: The AI service returned an unexpected response format.\n') +
-        chalk.yellow('This might be due to:') +
-        '\n- Service temporarily unavailable' +
-        '\n- Rate limiting' +
-        '\n- Model configuration issues\n' +
-        chalk.cyan('Please try again in a few moments.')
+          chalk.yellow('This might be due to:') +
+          '\n- Service temporarily unavailable' +
+          '\n- Rate limiting' +
+          '\n- Model configuration issues\n' +
+          chalk.cyan('Please try again in a few moments.')
       );
     } else {
       console.error(chalk.red(`Error: ${error.message}`));
     }
 
     // Provide fallback option
-    const { useFallback } = await inquirer.prompt([{
-      type: 'confirm',
-      name: 'useFallback',
-      message: 'Would you like to use a simple list format instead?',
-      default: true
-    }]);
+    const { useFallback } = await inquirer.prompt([
+      {
+        type: 'confirm',
+        name: 'useFallback',
+        message: 'Would you like to use a simple list format instead?',
+        default: true,
+      },
+    ]);
 
     if (useFallback) {
       return selectedPRs
@@ -222,7 +226,15 @@ Keep the summary concise, clear, and focused on the user impact. Use professiona
  * @param {string} version - Release version
  * @returns {Promise<Object>} Created pull request data
  */
-async function createReleasePR(owner, repo, summary, selectedPRs, sourceBranch, targetBranch, version) {
+async function createReleasePR(
+  owner,
+  repo,
+  summary,
+  selectedPRs,
+  sourceBranch,
+  targetBranch,
+  version
+) {
   const spinner = ora('Creating release PR...').start();
   try {
     const body = `# Release Summary
@@ -236,7 +248,7 @@ ${summary}`;
       head: sourceBranch,
       base: targetBranch,
       body,
-      draft: true
+      draft: true,
     });
 
     spinner.succeed(`Release PR #${pr.number} created successfully`);
@@ -251,14 +263,14 @@ ${summary}`;
 async function run() {
   // Initialize tokens sequentially
   const { githubToken, openaiToken } = await initializeTokens();
-  
+
   // Initialize clients with tokens
   octokit = new Octokit({
-    auth: githubToken
+    auth: githubToken,
   });
 
   openai = new OpenAI({
-    apiKey: openaiToken
+    apiKey: openaiToken,
   });
 
   const { owner, repo } = await inquirer.prompt([
@@ -266,29 +278,29 @@ async function run() {
       type: 'input',
       name: 'owner',
       message: 'Enter repository owner:',
-      validate: input => input.length > 0
+      validate: (input) => input.length > 0,
     },
     {
       type: 'input',
       name: 'repo',
       message: 'Enter repository name:',
-      validate: input => input.length > 0
-    }
+      validate: (input) => input.length > 0,
+    },
   ]);
 
   const pulls = await fetchPullRequests(owner, repo);
-  
+
   const { selectedPRs } = await inquirer.prompt([
     {
       type: 'checkbox',
       name: 'selectedPRs',
       message: 'Select pull requests to include in the release:',
-      choices: pulls.map(pr => ({
+      choices: pulls.map((pr) => ({
         name: `#${pr.number} - ${pr.title}`,
-        value: pr
+        value: pr,
       })),
-      validate: input => input.length > 0
-    }
+      validate: (input) => input.length > 0,
+    },
   ]);
 
   const { summaryType } = await inquirer.prompt([
@@ -298,19 +310,21 @@ async function run() {
       message: 'How would you like to summarize the pull requests?',
       choices: [
         { name: 'Use AI to generate a summary', value: 'ai' },
-        { name: 'Simply list the selected pull requests', value: 'list' }
-      ]
-    }
+        { name: 'Simply list the selected pull requests', value: 'list' },
+      ],
+    },
   ]);
 
   let summary;
   if (summaryType === 'ai') {
     summary = await generateSummary(selectedPRs);
   } else {
-    summary = selectedPRs.map(pr => {
-      const date = new Date(pr.created_at).toLocaleDateString();
-      return `#${pr.number} - ${pr.title} (by [@${pr.user.login}](https://github.com/${pr.user.login}) on ${date})`;
-    }).join('\n');
+    summary = selectedPRs
+      .map((pr) => {
+        const date = new Date(pr.created_at).toLocaleDateString();
+        return `#${pr.number} - ${pr.title} (by [@${pr.user.login}](https://github.com/${pr.user.login}) on ${date})`;
+      })
+      .join('\n');
   }
 
   console.log(chalk.cyan('\nSummary:'));
@@ -321,38 +335,46 @@ async function run() {
       type: 'input',
       name: 'version',
       message: 'Enter the version number for this release (e.g., 1.2.3):',
-      validate: input => {
+      validate: (input) => {
         // Validate semantic versioning format (x.y.z)
         const semverRegex = /^\d+\.\d+\.\d+$/;
         if (!semverRegex.test(input)) {
           return 'Please enter a valid version number in the format x.y.z (e.g., 1.2.3)';
         }
         return true;
-      }
+      },
     },
     {
       type: 'confirm',
       name: 'confirm',
-      message: 'Would you like to create a release PR with this summary?'
+      message: 'Would you like to create a release PR with this summary?',
     },
     {
       type: 'input',
       name: 'sourceBranch',
       message: 'Enter source branch name:',
-      when: answers => answers.confirm,
-      validate: input => input.length > 0
+      when: (answers) => answers.confirm,
+      validate: (input) => input.length > 0,
     },
     {
       type: 'input',
       name: 'targetBranch',
       message: 'Enter target branch name:',
-      when: answers => answers.confirm,
-      validate: input => input.length > 0
-    }
+      when: (answers) => answers.confirm,
+      validate: (input) => input.length > 0,
+    },
   ]);
 
   if (confirm) {
-    const pr = await createReleasePR(owner, repo, summary, selectedPRs, sourceBranch, targetBranch, version);
+    const pr = await createReleasePR(
+      owner,
+      repo,
+      summary,
+      selectedPRs,
+      sourceBranch,
+      targetBranch,
+      version
+    );
     console.log(chalk.green('\nSuccess! Release PR created:'), pr.html_url);
   }
 }
