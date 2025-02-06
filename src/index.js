@@ -7,120 +7,109 @@ import inquirer from 'inquirer';
 import chalk from 'chalk';
 import ora from 'ora';
 import OpenAI from 'openai';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-import { createRequire } from 'module';
 import { promisify } from 'util';
 import { exec as execCallback } from 'child_process';
+import { createRequire } from 'module';
 
+// Initialize utilities
 const exec = promisify(execCallback);
-
 const require = createRequire(import.meta.url);
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
 
 // Load environment variables
 config();
 
+// Initialize CLI program
 const program = new Command();
 const pkg = require('../package.json');
 
-async function checkAndConfigureGitHubToken() {
-  // Check for existing token in environment
-  let token = process.env.GITHUB_TOKEN;
-
-  // If no token, check git config
-  if (!token) {
-    try {
-      const { stdout } = await exec('git config --global github.token');
-      token = stdout.trim();
-    } catch (error) {
-      // Token not found in git config
-    }
+/**
+ * Get token from git config
+ * @param {string} key - Git config key
+ * @returns {Promise<string|null>} Token value or null if not found
+ */
+async function getGitConfigToken(key) {
+  try {
+    const { stdout } = await exec(`git config --global ${key}`);
+    return stdout.trim() || null;
+  } catch {
+    return null;
   }
-
-  // If still no token, prompt user
-  if (!token) {
-    console.log(chalk.yellow('No GitHub token found. Let\'s set one up.'));
-    console.log(chalk.cyan('You can create a new token at: https://github.com/settings/tokens/new'));
-    console.log(chalk.cyan('Make sure to enable the \'repo\' scope.'));
-
-    const { newToken } = await inquirer.prompt([
-      {
-        type: 'password',
-        name: 'newToken',
-        message: 'Enter your GitHub token:',
-        validate: input => input.length > 0
-      }
-    ]);
-
-    // Save token to git config
-    try {
-      await exec(`git config --global github.token "${newToken}"`);
-      console.log(chalk.green('GitHub token saved successfully!'));
-      token = newToken;
-    } catch (error) {
-      console.error(chalk.red('Failed to save GitHub token:'), error.message);
-      process.exit(1);
-    }
-  }
-
-  return token;
 }
 
-// Initialize clients
+/**
+ * Configure and get API token with support for environment variables, git config, and user input
+ * @param {Object} config - Token configuration object
+ * @param {string} config.envKey - Environment variable key
+ * @param {string} config.gitKey - Git config key
+ * @param {string} config.name - Service name (e.g., 'GitHub', 'OpenAI')
+ * @param {string} config.createUrl - URL where users can create new tokens
+ * @param {string} [config.additionalInfo] - Additional information to display
+ * @returns {Promise<string>} The configured token
+ */
+async function configureToken({ envKey, gitKey, name, createUrl, additionalInfo = '' }) {
+  const token = process.env[envKey] || await getGitConfigToken(gitKey);
+  
+  if (token) return token;
+
+  console.log(
+    chalk.yellow(`\nNo ${name} token found. Let's set one up.\n`) +
+    chalk.cyan(`Create a new token at: ${createUrl}`)
+  );
+
+  if (additionalInfo) {
+    console.log(chalk.cyan(additionalInfo));
+  }
+
+  const { newToken } = await inquirer.prompt([{
+    type: 'password',
+    name: 'newToken',
+    message: `Enter your ${name} token:`,
+    validate: input => input.length > 0 || 'Token is required'
+  }]);
+
+  try {
+    await exec(`git config --global ${gitKey} "${newToken}"`);
+    console.log(chalk.green(`${name} token saved successfully!`));
+    return newToken;
+  } catch (error) {
+    console.error(chalk.red(`Failed to save ${name} token:`), error.message);
+    process.exit(1);
+  }
+}
+
+// Initialize API clients
 let octokit;
 let openai;
 
-// Initialize tokens in correct order
+/**
+ * Initialize GitHub and OpenAI tokens
+ * @returns {Promise<Object>} Object containing both tokens
+ */
 async function initializeTokens() {
-  const githubToken = await checkAndConfigureGitHubToken();
-  const openaiToken = await checkAndConfigureOpenAIToken();
+  const githubToken = await configureToken({
+    envKey: 'GITHUB_TOKEN',
+    gitKey: 'github.token',
+    name: 'GitHub',
+    createUrl: 'https://github.com/settings/tokens/new',
+    additionalInfo: 'Make sure to enable the \'repo\' scope.'
+  });
+
+  const openaiToken = await configureToken({
+    envKey: 'OPENAI_API_KEY',
+    gitKey: 'openai.token',
+    name: 'OpenAI',
+    createUrl: 'https://platform.openai.com/api-keys'
+  });
+
   return { githubToken, openaiToken };
 }
 
-async function checkAndConfigureOpenAIToken() {
-  // Check for existing token in environment
-  let token = process.env.OPENAI_API_KEY;
-
-  // If no token, check git config
-  if (!token) {
-    try {
-      const { stdout } = await exec('git config --global openai.token');
-      token = stdout.trim();
-    } catch (error) {
-      // Token not found in git config
-    }
-  }
-
-  // If still no token, prompt user
-  if (!token) {
-    console.log(chalk.yellow('\nNo OpenAI token found. Let\'s set one up.'));
-    console.log(chalk.cyan('You can create a new token at: https://platform.openai.com/api-keys'));
-
-    const { newToken } = await inquirer.prompt([
-      {
-        type: 'password',
-        name: 'newToken',
-        message: 'Enter your OpenAI token:',
-        validate: input => input.length > 0
-      }
-    ]);
-
-    // Save token to git config
-    try {
-      await exec(`git config --global openai.token "${newToken}"`);
-      console.log(chalk.green('OpenAI token saved successfully!'));
-      token = newToken;
-    } catch (error) {
-      console.error(chalk.red('Failed to save OpenAI token:'), error.message);
-      process.exit(1);
-    }
-  }
-
-  return token;
-}
-
+/**
+ * Fetch closed pull requests from the repository
+ * @param {string} owner - Repository owner
+ * @param {string} repo - Repository name
+ * @returns {Promise<Array>} List of pull requests
+ */
 async function fetchPullRequests(owner, repo) {
   const spinner = ora('Fetching pull requests...').start();
   try {
@@ -132,19 +121,25 @@ async function fetchPullRequests(owner, repo) {
       direction: 'desc',
       per_page: 30
     });
-    spinner.succeed('Pull requests fetched successfully');
+    spinner.succeed(`Found ${pulls.length} pull requests`);
     return pulls;
   } catch (error) {
     spinner.fail('Failed to fetch pull requests');
-    console.error(chalk.red(error.message));
+    console.error(chalk.red(`Error: ${error.message}`));
     process.exit(1);
   }
 }
 
+/**
+ * Generate an AI-powered release summary from selected pull requests
+ * @param {Array} selectedPRs - List of selected pull requests
+ * @returns {Promise<string>} Generated release summary
+ */
 async function generateSummary(selectedPRs) {
   const spinner = ora('Generating release summary...').start();
   try {
     const prDetails = selectedPRs.map(pr => ({
+      number: pr.number,
       title: pr.title,
       author: pr.user.login,
       authorUrl: `https://github.com/${pr.user.login}`,
@@ -165,17 +160,30 @@ Keep the summary concise, clear, and focused on the user impact. Use professiona
     const response = await openai.chat.completions.create({
       model: "gpt-4",
       messages: [{ role: "user", content: prompt }],
+      temperature: 0.7,
+      max_tokens: 1000
     });
 
     spinner.succeed('Summary generated successfully');
     return response.choices[0].message.content;
   } catch (error) {
     spinner.fail('Failed to generate summary');
-    console.error(chalk.red(error.message));
+    console.error(chalk.red(`Error: ${error.message}`));
     process.exit(1);
   }
 }
 
+/**
+ * Create a release pull request with the generated summary
+ * @param {string} owner - Repository owner
+ * @param {string} repo - Repository name
+ * @param {string} summary - Generated release summary
+ * @param {Array} selectedPRs - List of selected pull requests
+ * @param {string} sourceBranch - Source branch name
+ * @param {string} targetBranch - Target branch name
+ * @param {string} version - Release version
+ * @returns {Promise<Object>} Created pull request data
+ */
 async function createReleasePR(owner, repo, summary, selectedPRs, sourceBranch, targetBranch, version) {
   const spinner = ora('Creating release PR...').start();
   try {
@@ -193,11 +201,11 @@ ${summary}`;
       draft: true
     });
 
-    spinner.succeed('Release PR created successfully');
+    spinner.succeed(`Release PR #${pr.number} created successfully`);
     return pr;
   } catch (error) {
     spinner.fail('Failed to create release PR');
-    console.error(chalk.red(error.message));
+    console.error(chalk.red(`Error: ${error.message}`));
     process.exit(1);
   }
 }
