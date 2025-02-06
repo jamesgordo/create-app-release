@@ -151,8 +151,12 @@ async function generateSummary(selectedPRs) {
 
     const prompt = `Create a release summary for the following pull requests. The summary should have two parts:
 
-1. A bullet-point list of key changes, grouped by type (e.g., Features, Bug Fixes, Improvements).
-2. List of pull requests included in the release. Format: "#<number> - <title> by [@<author>](<authorUrl>) (<date>)".
+1. Add Release Summary as H1 header
+2. Group the changes by type (e.g., Features, Bug Fixes, Improvements) and list them down in bullet points. 
+  2.1 Make each type is an h3 header with a corresponding emoji prefix.
+  2.2 For each type, make each bullet point concise and easy to read and understand for non-tech people.
+  2.3 Don't link the bullet points to a pull requests
+3. The last section should be a list of pull requests included in the release. Format: "#<number> - <title> by [@<author>](<authorUrl>) (<date>)".
 
 Pull Requests to summarize:
 ${JSON.stringify(prDetails, null, 2)}
@@ -160,10 +164,9 @@ ${JSON.stringify(prDetails, null, 2)}
 Keep the summary concise, clear, and focused on the user impact. Use professional but easy-to-understand language.`;
 
     const response = await openai.chat.completions.create({
-      model: 'gpt-4',
+      model: 'gpt-4o',
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.7,
-      max_tokens: 1000,
     });
 
     // Validate response structure
