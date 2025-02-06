@@ -151,12 +151,11 @@ async function generateSummary(selectedPRs) {
 
     const prompt = `Create a release summary for the following pull requests. The summary should have two parts:
 
-1. Add Release Summary as H1 header
-2. Group the changes by type (e.g., Features, Bug Fixes, Improvements) and list them down in bullet points. 
-  2.1 Make each type is an h3 header with a corresponding emoji prefix.
-  2.2 For each type, make each bullet point concise and easy to read and understand for non-tech people.
-  2.3 Don't link the bullet points to a pull requests
-3. The last section should be a list of pull requests included in the release. Format: "#<number> - <title> by [@<author>](<authorUrl>) (<date>)".
+1. Group the changes by type (e.g., Features, Bug Fixes, Improvements) and list them down in bullet points. 
+  1.1 Make each type is an h3 header with a corresponding emoji prefix.
+  1.2 For each type, make each bullet point concise and easy to read and understand for non-tech people.
+  1.3 Don't link the bullet points to a pull requests
+2. The last section should be a list of pull requests included in the release. Format: "#<number> - <title> by [@<author>](<authorUrl>) (<date>)".
 
 Pull Requests to summarize:
 ${JSON.stringify(prDetails, null, 2)}
