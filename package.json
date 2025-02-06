@@ -5,7 +5,10 @@
   "main": "src/index.js",
   "type": "module",
   "bin": {
-    "git-release-ai": "./src/index.js"
+    "create-app-release": "./bin/create-app-release"
+  },
+  "engines": {
+    "node": ">=14.0.0"
   },
   "scripts": {
     "start": "node src/index.js",
@@ -49,5 +52,10 @@
     "husky": "^9.1.7",
     "lint-staged": "^15.4.3",
     "prettier": "^3.2.5"
+  },
+  "overrides": {
+    "uri-js": {
+      "punycode": "^2.3.1"
+    }
   }
 }
