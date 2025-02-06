@@ -70,9 +70,49 @@ async function checkAndConfigureGitHubToken() {
 
 // Initialize clients
 let octokit;
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+let openai;
+
+async function checkAndConfigureOpenAIToken() {
+  // Check for existing token in environment
+  let token = process.env.OPENAI_API_KEY;
+
+  // If no token, check git config
+  if (!token) {
+    try {
+      const { stdout } = await exec('git config --global openai.token');
+      token = stdout.trim();
+    } catch (error) {
+      // Token not found in git config
+    }
+  }
+
+  // If still no token, prompt user
+  if (!token) {
+    console.log(chalk.yellow('\nNo OpenAI token found. Let\'s set one up.'));
+    console.log(chalk.cyan('You can create a new token at: https://platform.openai.com/api-keys'));
+
+    const { newToken } = await inquirer.prompt([
+      {
+        type: 'password',
+        name: 'newToken',
+        message: 'Enter your OpenAI token:',
+        validate: input => input.length > 0
+      }
+    ]);
+
+    // Save token to git config
+    try {
+      await exec(`git config --global openai.token "${newToken}"`);
+      console.log(chalk.green('OpenAI token saved successfully!'));
+      token = newToken;
+    } catch (error) {
+      console.error(chalk.red('Failed to save OpenAI token:'), error.message);
+      process.exit(1);
+    }
+  }
+
+  return token;
+}
 
 async function fetchPullRequests(owner, repo) {
   const spinner = ora('Fetching pull requests...').start();
@@ -153,12 +193,19 @@ async function createReleasePR(owner, repo, summary, selectedPRs, sourceBranch, 
 }
 
 async function run() {
-  // Check and configure GitHub token
-  const githubToken = await checkAndConfigureGitHubToken();
+  // Check and configure tokens
+  const [githubToken, openaiToken] = await Promise.all([
+    checkAndConfigureGitHubToken(),
+    checkAndConfigureOpenAIToken()
+  ]);
   
-  // Initialize Octokit with the token
+  // Initialize clients with tokens
   octokit = new Octokit({
     auth: githubToken
+  });
+
+  openai = new OpenAI({
+    apiKey: openaiToken
   });
 
   const { owner, repo } = await inquirer.prompt([
