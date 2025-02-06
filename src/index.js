@@ -139,16 +139,21 @@ async function generateSummary(selectedPRs) {
   try {
     const prDetails = selectedPRs.map(pr => ({
       title: pr.title,
-      body: pr.body || '',
-      number: pr.number,
-      url: pr.html_url
+      author: pr.user.login,
+      authorUrl: `https://github.com/${pr.user.login}`,
+      date: new Date(pr.created_at).toLocaleDateString(),
+      url: pr.html_url,
     }));
 
-    const prompt = `Generate a concise and organized summary of the following changes for a release PR. Group related changes into sections:
+    const prompt = `Create a release summary for the following pull requests. The summary should have two parts:
 
+1. A bullet-point list of key changes, grouped by type (e.g., Features, Bug Fixes, Improvements).
+2. List of pull requests included in the release. Format: "#<number> - <title> by [@<author>](<authorUrl>) (<date>)".
+
+Pull Requests to summarize:
 ${JSON.stringify(prDetails, null, 2)}
 
-Format the response in markdown with sections and bullet points. Keep it professional and user-friendly.`;
+Keep the summary concise, clear, and focused on the user impact. Use professional but easy-to-understand language.`;
 
     const response = await openai.chat.completions.create({
       model: "gpt-4",
