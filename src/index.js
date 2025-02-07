@@ -115,14 +115,19 @@ async function initializeTokens() {
 async function fetchPullRequests(owner, repo) {
   const spinner = ora('Fetching pull requests...').start();
   try {
-    const { data: pulls } = await octokit.pulls.list({
+    const pulls = [];
+    const iterator = octokit.paginate.iterator(octokit.pulls.list, {
       owner,
       repo,
       state: 'closed',
       sort: 'updated',
       direction: 'desc',
-      per_page: 30,
+      per_page: 100,
     });
+
+    for await (const { data } of iterator) {
+      pulls.push(...data);
+    }
     spinner.succeed(`Found ${pulls.length} pull requests`);
     return pulls;
   } catch (error) {
