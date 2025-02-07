@@ -112,23 +112,24 @@ async function initializeTokens() {
  * @param {string} repo - Repository name
  * @returns {Promise<Array>} List of pull requests
  */
-async function fetchPullRequests(owner, repo) {
+async function fetchPullRequests(owner, repo, targetBranch) {
   const spinner = ora('Fetching pull requests...').start();
   try {
     const pulls = [];
     const iterator = octokit.paginate.iterator(octokit.pulls.list, {
       owner,
       repo,
-      state: 'closed',
+      state: 'all',
       sort: 'updated',
       direction: 'desc',
       per_page: 100,
     });
 
     for await (const { data } of iterator) {
-      pulls.push(...data);
+      const unmergePRs = data.filter((pr) => !pr.merged && pr.base.ref === targetBranch);
+      pulls.push(...unmergePRs);
     }
-    spinner.succeed(`Found ${pulls.length} pull requests`);
+    spinner.succeed(`Found ${pulls.length} unmerged pull requests targeting ${targetBranch}`);
     return pulls;
   } catch (error) {
     spinner.fail('Failed to fetch pull requests');
@@ -280,7 +281,7 @@ async function run() {
     apiKey: openaiToken,
   });
 
-  const { owner, repo } = await inquirer.prompt([
+  const { owner, repo, sourceBranch, targetBranch } = await inquirer.prompt([
     {
       type: 'input',
       name: 'owner',
@@ -293,9 +294,21 @@ async function run() {
       message: 'Enter repository name:',
       validate: (input) => input.length > 0,
     },
+    {
+      type: 'input',
+      name: 'sourceBranch',
+      message: 'Enter source branch name:',
+      validate: (input) => input.length > 0,
+    },
+    {
+      type: 'input',
+      name: 'targetBranch',
+      message: 'Enter target branch name:',
+      validate: (input) => input.length > 0,
+    },
   ]);
 
-  const pulls = await fetchPullRequests(owner, repo);
+  const pulls = await fetchPullRequests(owner, repo, targetBranch);
 
   const { selectedPRs } = await inquirer.prompt([
     {
@@ -337,7 +350,7 @@ async function run() {
   console.log(chalk.cyan('\nSummary:'));
   console.log(summary);
 
-  const { version, confirm, sourceBranch, targetBranch } = await inquirer.prompt([
+  const { version, confirm } = await inquirer.prompt([
     {
       type: 'input',
       name: 'version',
@@ -355,20 +368,6 @@ async function run() {
       type: 'confirm',
       name: 'confirm',
       message: 'Would you like to create a release PR with this summary?',
-    },
-    {
-      type: 'input',
-      name: 'sourceBranch',
-      message: 'Enter source branch name:',
-      when: (answers) => answers.confirm,
-      validate: (input) => input.length > 0,
-    },
-    {
-      type: 'input',
-      name: 'targetBranch',
-      message: 'Enter target branch name:',
-      when: (answers) => answers.confirm,
-      validate: (input) => input.length > 0,
     },
   ]);
 
