@@ -1,6 +1,6 @@
 {
   "name": "create-app-release",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "AI-powered GitHub release automation tool",
   "main": "src/index.js",
   "type": "module",
