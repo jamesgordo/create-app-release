@@ -107,16 +107,14 @@ async function initializeTokens() {
 }
 
 /**
- * Fetch closed pull requests from the repository
+ * Get the latest release pull request
  * @param {string} owner - Repository owner
  * @param {string} repo - Repository name
- * @returns {Promise<Array>} List of pull requests
+ * @returns {Promise<Object|null>} Latest release PR or null
  */
-async function fetchPullRequests(owner, repo) {
-  const spinner = ora('Fetching pull requests...').start();
+async function getLatestReleasePR(owner, repo) {
   try {
-    const pulls = [];
-    const iterator = octokit.paginate.iterator(octokit.pulls.list, {
+    const iterator = octokit.paginate.iterator(octokit.rest.pulls.list, {
       owner,
       repo,
       state: 'closed',
@@ -126,9 +124,84 @@ async function fetchPullRequests(owner, repo) {
     });
 
     for await (const { data } of iterator) {
-      pulls.push(...data);
+      // SemVer regex pattern: matches X.Y.Z with optional pre-release and build metadata
+      const semverPattern =
+        /\b(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-((?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(?:\.(?:0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(?:\+([0-9a-zA-Z-]+(?:\.[0-9a-zA-Z-]+)*))?\b/;
+
+      const recentReleasePR = data.find((pr) => semverPattern.test(pr.title));
+      if (recentReleasePR) {
+        return recentReleasePR;
+      }
     }
-    spinner.succeed(`Found ${pulls.length} pull requests`);
+    return null;
+  } catch (error) {
+    console.error(chalk.red('Failed to fetch latest release PR:', error.message));
+    return null;
+  }
+}
+
+/**
+ * Extract PR numbers from release PR description
+ * @param {string} description - PR description
+ * @returns {Set<number>} Set of PR numbers
+ */
+function extractPRNumbersFromDescription(description) {
+  if (!description) return new Set();
+
+  // Match PR numbers in various formats like #123, (#123), or just plain 123 in PR lists
+  const prMatches = description.match(/#\d+|\(#\d+\)|(?<=PR:?\s*)\d+/g) || [];
+
+  return new Set(prMatches.map((match) => parseInt(match.replace(/[^0-9]/g, ''))));
+}
+
+/**
+ * Fetch closed pull requests from the repository
+ * @param {string} owner - Repository owner
+ * @param {string} repo - Repository name
+ * @param {string} targetBranch - Target branch name
+ * @returns {Promise<Array>} List of pull requests
+ */
+async function fetchPullRequests(owner, repo) {
+  const spinner = ora('Fetching pull requests...').start();
+  try {
+    // Get the latest release PR first
+    const latestReleasePR = await getLatestReleasePR(owner, repo);
+
+    const includedPRNumbers = extractPRNumbersFromDescription(latestReleasePR?.body);
+    const pulls = [];
+    const iterator = octokit.paginate.iterator(octokit.rest.pulls.list, {
+      owner,
+      repo,
+      state: 'closed',
+      sort: 'updated',
+      direction: 'desc',
+      per_page: 100,
+    });
+
+    for await (const { data } of iterator) {
+      // Filter PRs that are merged after the last release and not included in it
+      const relevantPRs = data.filter((pr) => {
+        if (!pr.merged_at) return false;
+
+        const isAfterLastRelease = latestReleasePR
+          ? new Date(pr.merged_at) >= new Date(latestReleasePR.merged_at)
+          : true;
+
+        return (
+          isAfterLastRelease &&
+          !includedPRNumbers.has(`#${pr.number}`) &&
+          pr.id !== latestReleasePR?.id
+        );
+      });
+      pulls.push(...relevantPRs);
+    }
+
+    const excludedCount = includedPRNumbers.size;
+    const message = latestReleasePR
+      ? `Found ${pulls.length} new merged pull requests (excluding ${excludedCount} PRs from last release)`
+      : `Found ${pulls.length} merged pull requests`;
+
+    spinner.succeed(message);
     return pulls;
   } catch (error) {
     spinner.fail('Failed to fetch pull requests');
