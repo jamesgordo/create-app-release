@@ -18,6 +18,22 @@ const require = createRequire(import.meta.url);
 // Load environment variables
 config();
 
+// Setup graceful exit handlers
+process.stdin.setRawMode(true);
+process.stdin.resume();
+process.stdin.setEncoding('utf8');
+
+// Display exit instructions
+console.log(chalk.cyan('Press Ctrl+C or q to exit at any time'));
+
+process.stdin.on('data', (key) => {
+  // Ctrl+C or 'q' to exit
+  if (key === '\u0003' || key.toLowerCase() === 'q') {
+    console.log(chalk.yellow('\nExiting gracefully...'));
+    process.exit(0);
+  }
+});
+
 // Initialize CLI program
 const program = new Command();
 const pkg = require('../package.json');
