@@ -256,8 +256,9 @@ ${JSON.stringify(prDetails, null, 2)}
 
 Keep the summary concise, clear, and focused on the user impact. Use professional but easy-to-understand language.`;
 
+    const model = program.opts().openaiModel || 'gpt-4o';
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+      model,
       messages: [{ role: 'user', content: prompt }],
       temperature: 0.7,
     });
@@ -357,8 +358,18 @@ ${summary}`;
 }
 
 async function run() {
-  // Initialize tokens sequentially
-  const { githubToken, openaiToken } = await initializeTokens();
+  // Get command line options
+  const options = program.opts();
+
+  // Initialize GitHub token
+  const { githubToken } = await initializeTokens();
+
+  // Get OpenAI token from command line or fallback to configuration
+  let openaiToken = options.openaiKey;
+  if (!openaiToken) {
+    const tokens = await initializeTokens();
+    openaiToken = tokens.openaiToken;
+  }
 
   // Initialize clients with tokens
   octokit = new Octokit({
@@ -367,6 +378,7 @@ async function run() {
 
   openai = new OpenAI({
     apiKey: openaiToken,
+    baseURL: options.openaiBaseUrl,
   });
 
   const { owner, repo } = await inquirer.prompt([
@@ -475,9 +487,30 @@ async function run() {
   }
 }
 
+const description = `AI-powered GitHub release automation tool
+
+Options:
+  --openai-key <key>        Set OpenAI API key directly (alternative to env/git config)
+  --openai-model <model>    Set OpenAI model to use (default: "gpt-4")
+                           Examples: gpt-4, gpt-3.5-turbo
+  --openai-base-url <url>   Set custom OpenAI API base URL
+                           Example: https://custom-openai-endpoint.com/v1
+
+Environment Variables:
+  GITHUB_TOKEN              GitHub personal access token
+  OPENAI_API_KEY            OpenAI API key (if not using --openai-key)
+
+Git Config:
+  github.token              GitHub token in git config
+  openai.token              OpenAI token in git config (if not using --openai-key)
+`;
+
 program
   .name('create-app-release')
-  .description('AI-powered GitHub release automation tool')
+  .description(description)
   .version(pkg.version)
+  .option('--openai-base-url <url>', 'Set custom OpenAI API base URL')
+  .option('--openai-model <model>', 'Set OpenAI model to use (default: "gpt-4")')
+  .option('--openai-key <key>', 'Set OpenAI API key directly (alternative to env/git config)')
   .action(run)
   .parse(process.argv);
