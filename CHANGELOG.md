@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2025-02-12
+
+### Added
+
+- Added support for multiple LLM providers:
+  - OpenAI models (default)
+  - Deepseek models
+  - QwenAI models
+  - Local LLM deployments
+- New command-line options for LLM configuration:
+  - `--openai-key`: Set API key directly
+  - `--openai-model`: Choose model (e.g., gpt-4o, deepseek-r1, qwen2.5)
+  - `--openai-base-url`: Set custom API base URL for different providers
+- Enhanced help information with detailed options and provider-specific examples
+
 ## [1.0.2] - 2025-02-09
 
 ### Changed
