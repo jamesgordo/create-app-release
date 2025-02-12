@@ -1,10 +1,18 @@
 # create-app-release
 
-An AI-powered GitHub release automation tool that helps you create release pull requests with automatically generated summaries using OpenAI's GPT-4 model. The tool intelligently groups your changes and creates professional release notes, making the release process smoother and more efficient.
+[![NPM Version](https://img.shields.io/npm/v/create-app-release.svg)](https://www.npmjs.com/package/create-app-release)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+An AI-powered GitHub release automation tool that helps you create release pull requests with automatically generated summaries using various LLM providers. The tool intelligently groups your changes and creates professional release notes, making the release process smoother and more efficient.
 
 ## Features
 
 - 🤖 AI-powered release notes generation using GPT-4
+- 🔄 Flexible LLM support:
+  - OpenAI models (GPT-4o, GPT-3.5-turbo)
+  - Deepseek models
+  - QwenAI models
+  - Local LLM deployments
 - 📦 Zero configuration - works right out of the box
 - 🔑 Secure token management through git config
 - 🎯 Interactive pull request selection
@@ -47,6 +55,38 @@ You'll need two tokens to use this tool:
 2. **OpenAI API Key** - Get from [OpenAI Platform](https://platform.openai.com/api-keys)
    - Will be stored in git config as `openai.token`
 
+### Command-Line Options
+
+Customize the tool's behavior using these command-line options:
+
+```bash
+# Set OpenAI API key directly (alternative to env/git config)
+--openai-key <key>
+
+# Choose OpenAI model (default: "gpt-4o")
+--openai-model <model>
+# Examples: gpt-4o, gpt-3.5-turbo, deepseek-r1, qwen2.5
+
+# Set custom OpenAI API base URL
+--openai-base-url <url>
+# Examples:
+# - Deepseek: https://api.deepseek.com/v1
+# - QwenAI: https://api.qwen.ai/v1
+# - Local: http://localhost:8000/v1
+# - Custom: https://custom-openai-endpoint.com/v1
+
+# Full example with different providers:
+
+# Using Deepseek
+npx create-app-release --openai-base-url https://api.deepseek.com/v1 --openai-key your_deepseek_key --openai-model deepseek-chat
+
+# Using QwenAI
+npx create-app-release --openai-base-url https://api.qwen.ai/v1 --openai-key your_qwen_key --openai-model qwen-14b-chat
+
+# Using Local LLM
+npx create-app-release --openai-base-url http://localhost:8000/v1 --openai-model local-model
+```
+
 ### Environment Variables (Optional)
 
 Tokens can also be provided via environment variables:
@@ -85,3 +125,7 @@ The tool generates professional release notes in this format:
 ## License
 
 MIT
+
+## Author
+
+[James Gordo](https://github.com/jamesgordo)
