@@ -396,6 +396,25 @@ async function run() {
     },
   ]);
 
+  // Get the latest release version for the repository
+  let suggestedVersion = '1.0.0';
+  try {
+    const { data: releases } = await octokit.rest.repos.listReleases({
+      owner,
+      repo,
+      per_page: 1,
+    });
+
+    if (releases && releases.length > 0) {
+      // Extract version from tag_name (removing any 'v' prefix)
+      const latestTag = releases[0].tag_name.replace(/^v/, '');
+      const [major, minor, patch] = latestTag.split('.');
+      suggestedVersion = `${major}.${minor}.${parseInt(patch) + 1}`;
+    }
+  } catch (error) {
+    console.log(chalk.yellow(`Could not fetch latest release version: ${error.message}`));
+  }
+
   const pulls = await fetchPullRequests(owner, repo);
 
   const { selectedPRs } = await inquirer.prompt([
@@ -442,7 +461,8 @@ async function run() {
     {
       type: 'input',
       name: 'version',
-      message: 'Enter the version number for this release (e.g., 1.2.3):',
+      message: `Enter the version number for this release (suggested: ${suggestedVersion}):`,
+      default: suggestedVersion,
       validate: (input) => {
         // Validate semantic versioning format (x.y.z)
         const semverRegex = /^\d+\.\d+\.\d+$/;
