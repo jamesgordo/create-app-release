@@ -174,10 +174,10 @@ function extractPRNumbersFromDescription(description) {
  * Fetch closed pull requests from the repository
  * @param {string} owner - Repository owner
  * @param {string} repo - Repository name
- * @param {string} targetBranch - Target branch name
+ * @param {string} baseBranch - Base branch name
  * @returns {Promise<Array>} List of pull requests
  */
-async function fetchPullRequests(owner, repo) {
+async function fetchPullRequests(owner, repo, baseBranch) {
   const spinner = ora('Fetching pull requests...').start();
   try {
     // Get the latest release PR first
@@ -195,9 +195,13 @@ async function fetchPullRequests(owner, repo) {
     });
 
     for await (const { data } of iterator) {
-      // Filter PRs that are merged after the last release and not included in it
+      // Filter PRs that are merged after the last release, not included in it, and merged to the target branch
       const relevantPRs = data.filter((pr) => {
+        // Skip PRs that aren't merged
         if (!pr.merged_at) return false;
+
+        // Skip PRs that aren't targeting the specified branch
+        if (pr.base && pr.base.ref !== baseBranch) return false;
 
         const isAfterLastRelease = latestReleasePR
           ? new Date(pr.merged_at) >= new Date(latestReleasePR.merged_at)
@@ -381,7 +385,7 @@ async function run() {
     baseURL: options.openaiBaseUrl,
   });
 
-  const { owner, repo } = await inquirer.prompt([
+  const { owner, repo, sourceBranch, targetBranch } = await inquirer.prompt([
     {
       type: 'input',
       name: 'owner',
@@ -392,6 +396,18 @@ async function run() {
       type: 'input',
       name: 'repo',
       message: 'Enter repository name:',
+      validate: (input) => input.length > 0,
+    },
+    {
+      type: 'input',
+      name: 'sourceBranch',
+      message: 'Enter source branch name:',
+      validate: (input) => input.length > 0,
+    },
+    {
+      type: 'input',
+      name: 'targetBranch',
+      message: 'Enter target branch name:',
       validate: (input) => input.length > 0,
     },
   ]);
@@ -415,7 +431,7 @@ async function run() {
     console.log(chalk.yellow(`Could not fetch latest release version: ${error.message}`));
   }
 
-  const pulls = await fetchPullRequests(owner, repo);
+  const pulls = await fetchPullRequests(owner, repo, sourceBranch);
 
   const { selectedPRs } = await inquirer.prompt([
     {
@@ -457,7 +473,7 @@ async function run() {
   console.log(chalk.cyan('\nSummary:'));
   console.log(summary);
 
-  const { version, confirm, sourceBranch, targetBranch } = await inquirer.prompt([
+  const { version, confirm } = await inquirer.prompt([
     {
       type: 'input',
       name: 'version',
@@ -476,20 +492,6 @@ async function run() {
       type: 'confirm',
       name: 'confirm',
       message: 'Would you like to create a release PR with this summary?',
-    },
-    {
-      type: 'input',
-      name: 'sourceBranch',
-      message: 'Enter source branch name:',
-      when: (answers) => answers.confirm,
-      validate: (input) => input.length > 0,
-    },
-    {
-      type: 'input',
-      name: 'targetBranch',
-      message: 'Enter target branch name:',
-      when: (answers) => answers.confirm,
-      validate: (input) => input.length > 0,
     },
   ]);
 
