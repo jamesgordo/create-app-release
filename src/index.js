@@ -556,12 +556,14 @@ async function run() {
       type: 'input',
       name: 'sourceBranch',
       message: 'Enter source branch name:',
+      default: 'staging',
       validate: (input) => input.length > 0,
     },
     {
       type: 'input',
       name: 'targetBranch',
       message: 'Enter target branch name:',
+      default: 'main',
       validate: (input) => input.length > 0,
     },
   ]);
