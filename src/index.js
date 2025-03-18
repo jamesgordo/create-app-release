@@ -171,6 +171,122 @@ function extractPRNumbersFromDescription(description) {
 }
 
 /**
+ * Fetch repositories the user has contributed to, including personal and organization repos
+ * @returns {Promise<Array>} List of repositories
+ */
+async function fetchUserRepositories() {
+  const spinner = ora('Fetching your repositories...').start();
+  try {
+    // Get authenticated user info
+    const { data: user } = await octokit.rest.users.getAuthenticated();
+    const username = user.login;
+
+    // Get user's repositories (both owned and contributed to)
+    const repos = [];
+
+    // Fetch user's own repositories
+    const userReposIterator = octokit.paginate.iterator(
+      octokit.rest.repos.listForAuthenticatedUser,
+      {
+        per_page: 100,
+        sort: 'updated',
+        direction: 'desc',
+      }
+    );
+
+    for await (const { data: userRepos } of userReposIterator) {
+      repos.push(
+        ...userRepos.map((repo) => ({
+          name: `${repo.owner.login}/${repo.name}`,
+          fullName: `${repo.owner.login}/${repo.name}`,
+          owner: repo.owner.login,
+          repoName: repo.name,
+          updatedAt: new Date(repo.updated_at),
+          pushedAt: new Date(repo.pushed_at || repo.updated_at),
+          isPersonal: repo.owner.login === username,
+          activityScore: 0, // Will be calculated based on user activity
+        }))
+      );
+
+      // Limit to 100 repositories to avoid excessive API calls
+      if (repos.length >= 100) break;
+    }
+
+    // Get recent user activity for each repository (limited to top 15 to avoid API rate limits)
+    const topRepos = repos.slice(0, 15);
+    spinner.text = 'Analyzing your recent activity...';
+
+    // Process repositories in parallel with rate limiting
+    await Promise.all(
+      topRepos.map(async (repo, index) => {
+        // Add delay to avoid hitting rate limits
+        await new Promise((resolve) => setTimeout(resolve, index * 100));
+
+        try {
+          // Check for user's recent commits
+          const { data: commits } = await octokit.rest.repos
+            .listCommits({
+              owner: repo.owner,
+              repo: repo.repoName,
+              author: username,
+              per_page: 100,
+            })
+            .catch(() => ({ data: [] }));
+
+          // Check for user's recent PRs
+          const { data: prs } = await octokit.rest.pulls
+            .list({
+              owner: repo.owner,
+              repo: repo.repoName,
+              state: 'all',
+              per_page: 100,
+            })
+            .catch(() => ({ data: [] }));
+
+          // Calculate activity score based on recency and count
+          const now = new Date();
+          let score = 0;
+
+          // Add points for recent commits
+          commits.forEach((commit) => {
+            const daysAgo = (now - new Date(commit.commit.author.date)) / (1000 * 60 * 60 * 24);
+            score += Math.max(30 - daysAgo, 0); // More points for more recent commits
+          });
+
+          // Add points for PRs authored or reviewed by user
+          prs.forEach((pr) => {
+            if (pr.user.login === username) {
+              const daysAgo = (now - new Date(pr.updated_at)) / (1000 * 60 * 60 * 24);
+              score += Math.max(20 - daysAgo, 0); // Points for authoring PRs
+            }
+          });
+
+          // Update the repository's activity score
+          repo.activityScore = score;
+        } catch (error) {
+          // Silently continue if we hit API limits or other issues
+        }
+      })
+    );
+
+    // Sort repositories by activity score first, then by pushed date
+    repos.sort((a, b) => {
+      if (a.activityScore !== b.activityScore) {
+        return b.activityScore - a.activityScore; // Higher score first
+      }
+      return b.pushedAt - a.pushedAt; // Then by most recent push
+    });
+
+    spinner.succeed(`Found ${repos.length} repositories, sorted by your recent activity`);
+    return repos;
+  } catch (error) {
+    spinner.fail('Failed to fetch repositories');
+    console.error(chalk.red(`Error: ${error.message}`));
+    return [];
+  }
+}
+
+/**
  * Fetch closed pull requests from the repository
  * @param {string} owner - Repository owner
  * @param {string} repo - Repository name
@@ -385,19 +501,56 @@ async function run() {
     baseURL: options.openaiBaseUrl,
   });
 
-  const { owner, repo, sourceBranch, targetBranch } = await inquirer.prompt([
+  // Fetch repositories the user has contributed to
+  const userRepos = await fetchUserRepositories();
+
+  // Prepare repository choices
+  const repoChoices =
+    userRepos.length > 0
+      ? userRepos.map((repo) => ({
+          name: repo.fullName + (repo.isPersonal ? ' (personal)' : ''),
+          value: { owner: repo.owner, repo: repo.repoName },
+        }))
+      : [];
+
+  // Add option for manual entry
+  repoChoices.push({ name: '-- Enter repository manually --', value: 'manual' });
+
+  let repoInfo = { owner: '', repo: '' };
+  const { repoSelection } = await inquirer.prompt([
     {
-      type: 'input',
-      name: 'owner',
-      message: 'Enter repository owner:',
-      validate: (input) => input.length > 0,
+      type: 'list',
+      name: 'repoSelection',
+      message: 'Select a repository:',
+      choices: repoChoices,
+      pageSize: 5,
     },
-    {
-      type: 'input',
-      name: 'repo',
-      message: 'Enter repository name:',
-      validate: (input) => input.length > 0,
-    },
+  ]);
+
+  // Handle manual repository entry
+  if (repoSelection === 'manual') {
+    const manualEntry = await inquirer.prompt([
+      {
+        type: 'input',
+        name: 'owner',
+        message: 'Enter repository owner:',
+        validate: (input) => input.length > 0,
+      },
+      {
+        type: 'input',
+        name: 'repo',
+        message: 'Enter repository name:',
+        validate: (input) => input.length > 0,
+      },
+    ]);
+    repoInfo = manualEntry;
+  } else {
+    repoInfo = repoSelection;
+  }
+
+  const { owner, repo } = repoInfo;
+
+  const { sourceBranch, targetBranch } = await inquirer.prompt([
     {
       type: 'input',
       name: 'sourceBranch',
@@ -418,7 +571,7 @@ async function run() {
     const { data: releases } = await octokit.rest.repos.listReleases({
       owner,
       repo,
-      per_page: 1,
+      per_page: 100,
     });
 
     if (releases && releases.length > 0) {
