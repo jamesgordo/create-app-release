@@ -370,6 +370,7 @@ async function generateSummary(selectedPRs) {
   1.2 For each type, make each bullet point concise and easy to read and understand for non-tech people.
   1.3 Don't link the bullet points to a pull requests
 2. The last section should be a list of pull requests included in the release. Format: "#<number> - <title> by [@<author>](<authorUrl>) (<date>)".
+3. Don't add Release Summary title/heading.
 
 Pull Requests to summarize:
 ${JSON.stringify(prDetails, null, 2)}
