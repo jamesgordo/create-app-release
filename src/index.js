@@ -6,10 +6,14 @@ import { Octokit } from '@octokit/rest';
 import inquirer from 'inquirer';
 import chalk from 'chalk';
 import ora from 'ora';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import OpenAI from 'openai';
 import { promisify } from 'util';
 import { exec as execCallback } from 'child_process';
 import { createRequire } from 'module';
+import { tmpdir } from 'os';
+import { join } from 'path';
+import { writeFile, unlink } from 'fs/promises';
 
 // Initialize utilities
 const exec = promisify(execCallback);
@@ -98,12 +102,13 @@ async function configureToken({ envKey, gitKey, name, createUrl, additionalInfo 
 // Initialize API clients
 let octokit;
 let openai;
+let gemini;
 
 /**
- * Initialize GitHub and OpenAI tokens
- * @returns {Promise<Object>} Object containing both tokens
+ * Initialize GitHub token
+ * @returns {Promise<string>} The GitHub token
  */
-async function initializeTokens() {
+async function initializeGitHubToken() {
   const githubToken = await configureToken({
     envKey: 'GITHUB_TOKEN',
     gitKey: 'github.token',
@@ -111,15 +116,7 @@ async function initializeTokens() {
     createUrl: 'https://github.com/settings/tokens/new',
     additionalInfo: "Make sure to enable the 'repo' scope.",
   });
-
-  const openaiToken = await configureToken({
-    envKey: 'OPENAI_API_KEY',
-    gitKey: 'openai.token',
-    name: 'OpenAI',
-    createUrl: 'https://platform.openai.com/api-keys',
-  });
-
-  return { githubToken, openaiToken };
+  return githubToken;
 }
 
 /**
@@ -349,9 +346,10 @@ async function fetchPullRequests(owner, repo, baseBranch) {
 /**
  * Generate an AI-powered release summary from selected pull requests
  * @param {Array} selectedPRs - List of selected pull requests
+ * @param {string} aiProvider - The AI provider to use ('openai' or 'gemini')
  * @returns {Promise<string>} Generated release summary
  */
-async function generateSummary(selectedPRs) {
+async function generateSummary(selectedPRs, aiProvider) {
   const spinner = ora('Generating release summary...').start();
   try {
     const prDetails = selectedPRs.map((pr) => ({
@@ -377,22 +375,39 @@ ${JSON.stringify(prDetails, null, 2)}
 
 Keep the summary concise, clear, and focused on the user impact. Use professional but easy-to-understand language.`;
 
-    const model = program.opts().openaiModel || 'gpt-4o';
-    const response = await openai.chat.completions.create({
-      model,
-      messages: [{ role: 'user', content: prompt }],
-      temperature: 0.7,
-    });
+    let summaryText;
 
-    // Validate response structure
-    if (!response?.choices?.length || !response.choices[0]?.message?.content) {
-      throw new Error(
-        'Invalid API response structure. Expected response.choices[0].message.content'
-      );
+    if (aiProvider === 'openai') {
+      const model = program.opts().openaiModel || 'gpt-4o';
+      const response = await openai.chat.completions.create({
+        model,
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.7,
+      });
+
+      if (!response?.choices?.length || !response.choices[0]?.message?.content) {
+        throw new Error('Invalid API response structure from OpenAI.');
+      }
+      summaryText = response.choices[0].message.content;
+    } else if (aiProvider === 'gemini') {
+      const modelName = program.opts().geminiModel || 'gemini-pro';
+      const model = gemini.getGenerativeModel({ model: modelName });
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      summaryText = response.text();
+    } else if (aiProvider === 'gemini-cli') {
+      const tempFilePath = join(tmpdir(), `gemini-prompt-${Date.now()}.txt`);
+      try {
+        await writeFile(tempFilePath, prompt, 'utf-8');
+        const { stdout } = await exec(`gemini < ${tempFilePath}`);
+        summaryText = stdout;
+      } finally {
+        await unlink(tempFilePath);
+      }
     }
 
     spinner.succeed('Summary generated successfully');
-    return response.choices[0].message.content;
+    return summaryText;
   } catch (error) {
     spinner.fail('Failed to generate summary');
 
@@ -483,24 +498,65 @@ async function run() {
   const options = program.opts();
 
   // Initialize GitHub token
-  const { githubToken } = await initializeTokens();
+  const githubToken = await initializeGitHubToken();
+  octokit = new Octokit({ auth: githubToken });
 
-  // Get OpenAI token from command line or fallback to configuration
-  let openaiToken = options.openaiKey;
-  if (!openaiToken) {
-    const tokens = await initializeTokens();
-    openaiToken = tokens.openaiToken;
+  // AI Provider selection
+  let aiProvider = options.aiProvider;
+  if (!aiProvider) {
+    const { provider } = await inquirer.prompt([
+      {
+        type: 'list',
+        name: 'provider',
+        message: 'Select an AI provider for generating summaries:',
+        choices: [
+          { name: 'OpenAI', value: 'openai' },
+          { name: 'Gemini (API Key)', value: 'gemini' },
+          { name: 'Gemini (CLI)', value: 'gemini-cli' },
+        ],
+        default: 'openai',
+      },
+    ]);
+    aiProvider = provider;
   }
 
-  // Initialize clients with tokens
-  octokit = new Octokit({
-    auth: githubToken,
-  });
-
-  openai = new OpenAI({
-    apiKey: openaiToken,
-    baseURL: options.openaiBaseUrl,
-  });
+  // Initialize AI client
+  if (aiProvider === 'openai') {
+    const openaiToken =
+      options.openaiKey ||
+      (await configureToken({
+        envKey: 'OPENAI_API_KEY',
+        gitKey: 'openai.token',
+        name: 'OpenAI',
+        createUrl: 'https://platform.openai.com/api-keys',
+      }));
+    openai = new OpenAI({
+      apiKey: openaiToken,
+      baseURL: options.openaiBaseUrl,
+    });
+  } else if (aiProvider === 'gemini') {
+    const geminiToken =
+      options.geminiKey ||
+      (await configureToken({
+        envKey: 'GEMINI_API_KEY',
+        gitKey: 'gemini.token',
+        name: 'Gemini',
+        createUrl: 'https://makersuite.google.com/app/apikey',
+      }));
+    gemini = new GoogleGenerativeAI(geminiToken);
+  } else if (aiProvider === 'gemini-cli') {
+    // No initialization needed, but I can check if `gemini` command exists
+    try {
+      await exec('command -v gemini');
+    } catch (error) {
+      console.error(
+        chalk.red(
+          'Error: `gemini` command not found. Please install the gemini-cli tool and make sure it is in your PATH.'
+        )
+      );
+      process.exit(1);
+    }
+  }
 
   // Fetch repositories the user has contributed to
   const userRepos = await fetchUserRepositories();
@@ -616,7 +672,7 @@ async function run() {
 
   let summary;
   if (summaryType === 'ai') {
-    summary = await generateSummary(selectedPRs);
+    summary = await generateSummary(selectedPRs, aiProvider);
   } else {
     summary = selectedPRs
       .map((pr) => {
@@ -668,27 +724,36 @@ async function run() {
 const description = `AI-powered GitHub release automation tool
 
 Options:
-  --openai-key <key>        Set OpenAI API key directly (alternative to env/git config)
-  --openai-model <model>    Set OpenAI model to use (default: "gpt-4")
-                           Examples: gpt-4, gpt-3.5-turbo
+  --ai-provider <provider>  Set AI provider to use ('openai', 'gemini', or 'gemini-cli')
+  --openai-key <key>        Set OpenAI API key directly
+  --openai-model <model>    Set OpenAI model to use (default: "gpt-4o")
   --openai-base-url <url>   Set custom OpenAI API base URL
-                           Example: https://custom-openai-endpoint.com/v1
+  --gemini-key <key>        Set Gemini API key directly (for 'gemini' provider)
+  --gemini-model <model>    Set Gemini model to use (default: "gemini-pro")
 
 Environment Variables:
   GITHUB_TOKEN              GitHub personal access token
-  OPENAI_API_KEY            OpenAI API key (if not using --openai-key)
+  OPENAI_API_KEY            OpenAI API key
+  GEMINI_API_KEY            Gemini API key
 
 Git Config:
   github.token              GitHub token in git config
-  openai.token              OpenAI token in git config (if not using --openai-key)
+  openai.token              OpenAI token in git config
+  gemini.token              Gemini token in git config
 `;
 
 program
   .name('create-app-release')
   .description(description)
   .version(pkg.version)
+  .option(
+    '--ai-provider <provider>',
+    "Set AI provider to use ('openai', 'gemini', or 'gemini-cli')"
+  )
   .option('--openai-base-url <url>', 'Set custom OpenAI API base URL')
-  .option('--openai-model <model>', 'Set OpenAI model to use (default: "gpt-4")')
-  .option('--openai-key <key>', 'Set OpenAI API key directly (alternative to env/git config)')
+  .option('--openai-model <model>', 'Set OpenAI model to use (default: "gpt-4o")')
+  .option('--openai-key <key>', 'Set OpenAI API key directly')
+  .option('--gemini-model <model>', 'Set Gemini model to use (default: "gemini-pro")')
+  .option('--gemini-key <key>', "Set Gemini API key directly (for 'gemini' provider)")
   .action(run)
   .parse(process.argv);
