@@ -7,25 +7,24 @@ An AI-powered GitHub release automation tool that helps you create release pull 
 
 ## Features
 
-- 🤖 AI-powered release notes generation using GPT-4
-- 🔄 Flexible LLM support:
-  - OpenAI models (GPT-4o, GPT-3.5-turbo)
-  - Deepseek models
-  - QwenAI models
-  - Local LLM deployments
-- 📦 Zero configuration - works right out of the box
-- 🔑 Secure token management through git config
-- 🎯 Interactive pull request selection
-- ✨ Professional markdown formatting
-- 📝 Smart categorization of changes
-- 🌟 User-friendly CLI interface
+- 🤖 AI-powered release notes generation.
+- 🔄 **Flexible LLM Support**: Seamlessly switch between OpenAI, Google Gemini, and any OpenAI-compatible API.
+  - **OpenAI**: `gpt-4o`, `gpt-3.5-turbo`.
+  - **Google Gemini**: `gemini-pro` via API key or local `gemini-cli`.
+  - **OpenAI-Compatible**: Supports providers like Deepseek, QwenAI, or local LLMs via a custom base URL.
+- 📦 Zero configuration - works right out of the box.
+- 🔑 Secure token management through `git config`.
+- 🎯 Interactive pull request selection.
+- ✨ Professional markdown formatting.
+- 📝 Smart categorization of changes.
+- 🌟 User-friendly CLI interface.
 
 ## Prerequisites
 
 - Node.js 14 or higher
 - Git installed and configured
-- GitHub account with repository access
-- OpenAI account (for GPT-4 access)
+- A GitHub account with repository access
+- An account with an AI provider (e.g., OpenAI, Google Gemini) if using an API key.
 
 ## Usage
 
@@ -35,57 +34,65 @@ Run the tool directly using npx:
 npx create-app-release
 ```
 
-On first run, the tool will guide you through:
-
-1. Setting up your GitHub token (stored in git config)
-2. Configuring your OpenAI API key (stored in git config)
-3. Selecting pull requests for the release
-4. Reviewing the AI-generated summary
-5. Creating the release pull request
+On the first run, the tool will guide you through setting up the necessary tokens and configurations.
 
 ### Token Setup
 
-You'll need two tokens to use this tool:
+You will need a **GitHub Token** and an API key for your chosen AI provider.
 
-1. **GitHub Token** - Create at [GitHub Token Settings](https://github.com/settings/tokens/new)
+1.  **GitHub Token** - Create at [GitHub Token Settings](https://github.com/settings/tokens/new)
+    - Required scope: `repo`
+    - Stored in git config as `github.token`
 
-   - Required scope: `repo`
-   - Will be stored in git config as `github.token`
+2.  **OpenAI API Key** - Get from [OpenAI Platform](https://platform.openai.com/api-keys)
+    - Required if using the `openai` provider.
+    - Stored in git config as `openai.token`
 
-2. **OpenAI API Key** - Get from [OpenAI Platform](https://platform.openai.com/api-keys)
-   - Will be stored in git config as `openai.token`
+3.  **Gemini API Key** - Get from [Google AI Studio](https://makersuite.google.com/app/apikey)
+    - Required if using the `gemini` provider.
+    - Stored in git config as `gemini.token`
 
 ### Command-Line Options
 
-Customize the tool's behavior using these command-line options:
+#### General Options
 
-```bash
-# Set OpenAI API key directly (alternative to env/git config)
---openai-key <key>
+`--ai-provider <provider>`
+: Select the AI provider.
+: **Options**: `openai`, `gemini`, `gemini-cli`.
+: If not specified, you will be prompted to choose.
 
-# Choose OpenAI model (default: "gpt-4o")
---openai-model <model>
-# Examples: gpt-4o, gpt-3.5-turbo, deepseek-r1, qwen2.5
+---
 
-# Set custom OpenAI API base URL
---openai-base-url <url>
-# Examples:
-# - Deepseek: https://api.deepseek.com/v1
-# - QwenAI: https://api.qwen.ai/v1
-# - Local: http://localhost:8000/v1
-# - Custom: https://custom-openai-endpoint.com/v1
+#### OpenAI Provider (`--ai-provider openai`)
 
-# Full example with different providers:
+`--openai-key <key>`
+: Set your OpenAI API key directly.
 
-# Using Deepseek
-npx create-app-release --openai-base-url https://api.deepseek.com/v1 --openai-key your_deepseek_key --openai-model deepseek-chat
+`--openai-model <model>`
+: Choose the OpenAI model (default: `"gpt-4o"`).
 
-# Using QwenAI
-npx create-app-release --openai-base-url https://api.qwen.ai/v1 --openai-key your_qwen_key --openai-model qwen-14b-chat
+`--openai-base-url <url>`
+: Set a custom base URL for OpenAI-compatible APIs (e.g., Deepseek, QwenAI, local LLMs).
+: **Examples**:
+: - `https://api.deepseek.com/v1`
+: - `https://api.qwen.ai/v1`
+: - `http://localhost:8000/v1`
 
-# Using Local LLM
-npx create-app-release --openai-base-url http://localhost:8000/v1 --openai-model local-model
-```
+---
+
+#### Gemini Provider (`--ai-provider gemini`)
+
+`--gemini-key <key>`
+: Set your Gemini API key directly.
+
+`--gemini-model <model>`
+: Set the Gemini model to use (default: `"gemini-pro"`).
+
+---
+
+#### Gemini CLI Provider (`--ai-provider gemini-cli`)
+
+This option uses a local `gemini` command-line tool, which must be installed and available in your system's `PATH`. The script will execute the `gemini` command, passing the prompt to its standard input. No API key is required for this provider option.
 
 ### Environment Variables (Optional)
 
