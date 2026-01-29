@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-01-29
+
+### Added
+
+- Added support for Google Gemini as an AI provider (API key and CLI integration).
+- Introduced `--ai-provider` option to select between OpenAI, Gemini API, and Gemini CLI.
+- Added `--gemini-key` and `--gemini-model` options for configuring Gemini API.
+- Enabled direct integration with `gemini-cli` for summary generation.
+
 ## [1.2.0] - 2025-03-18
 
 ### Added
@@ -72,6 +81,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - ora - Terminal spinners
 - dotenv - Environment variable management
 
+[1.3.0]: https://github.com/jamesgordo/create-app-release/releases/tag/v1.3.0
 [1.2.0]: https://github.com/jamesgordo/create-app-release/releases/tag/v1.2.0
 [1.1.0]: https://github.com/jamesgordo/create-app-release/releases/tag/v1.1.0
 [1.0.0]: https://github.com/jamesgordo/create-app-release/releases/tag/v1.0.0
